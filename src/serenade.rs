@@ -1,5 +1,3 @@
-extern crate websocket;
-
 use log::{info, error, debug, trace, warn};
 use neovim_lib::{Neovim, NeovimApi};
 use rand::Rng;
