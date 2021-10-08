@@ -17,19 +17,19 @@ cargo_build() {
 
 download() {
     if [ "$2" = ".tar.gz" ]; then
-        command -v curl > /dev/null && curl -L $1 --output target/release/${name} && tar -xzf target/release/${name}
+        command -v curl > /dev/null && curl -L $1 --output target/release/$name && cd target/release && tar -xzf $name && cd ../../
     else
-    	command -v curl > /dev/null && curl -L $1 --output target/release/${name}${2}
+    	command -v curl > /dev/null && curl -L $1 --output target/release/$name$2
     fi	
 }
 
 fetch_prebuilt_binary() {
     echo "Downloading binary.."
-    url=https://github.com/mattscamp/${name}/releases/download/${version}/${name}-${1}${2}
+    url=https://github.com/mattscamp/$name/releases/download/$version/$name-$1$2
     echo $url
     mkdir -p target/release
 
-    if (download "${url}" ${2}); then
+    if (download "${url}" $2); then
         chmod a+x target/release/${name}
         return
     else
