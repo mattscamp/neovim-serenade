@@ -22,11 +22,11 @@ use std::sync::{Arc, Mutex};
 fn init(tx: Sender<String>, rx: Receiver<String>) {
     let mut session = Session::new_parent().unwrap();
     session.set_infinity_timeout();
-    
+
     let neovim = Neovim::new(session);
-    
+
     let nvim_instance = Arc::new(Mutex::new(neovim));
-    
+
     let mut nvim = neovim::NVimEventHandler::new(Arc::clone(&nvim_instance), tx);
     let mut serenade = serenade::SerenadeEventHandler::new(Arc::clone(&nvim_instance), rx);
 
@@ -70,7 +70,7 @@ fn main() {
         .unwrap();
 
     let _handle = log4rs::init_config(config);
-    
+
     let (tx, rx) = channel();
 
     init(tx, rx);

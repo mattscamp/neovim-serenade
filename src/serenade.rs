@@ -1,15 +1,15 @@
-use log::{info, error, debug, trace, warn};
+use log::{debug, error, info, trace, warn};
 use neovim_lib::{Neovim, NeovimApi};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use std::{error::Error, net::TcpStream};
 use std::{thread, time::Duration};
-use std::time::Instant;
+use tungstenite::WebSocket;
 use tungstenite::{connect, Message};
 use url::Url;
-use tungstenite::WebSocket;
 
 const CONNECTION: &'static str = "ws://localhost:17373";
 
@@ -99,13 +99,12 @@ struct SerenadePayload {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SerenadeStateData {
-        source: String,
-        cursor: u64,
-        selectionStart: u64,
-        selectionEnd: u64,
-        filename: String,
+    source: String,
+    cursor: u64,
+    selectionStart: u64,
+    selectionEnd: u64,
+    filename: String,
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SerenadeEditorState {
@@ -136,7 +135,6 @@ struct SerenadeStateCallback {
     data: SerenadeStateCallbackData,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 struct SerenadeCallback {
     message: String,
@@ -166,7 +164,7 @@ impl SerenadeEventHandler {
             client,
             rx: rx,
             nvim: nvim,
-        }
+        };
     }
 
     fn create_client(connection: &str) -> WebSocket<TcpStream> {
@@ -177,8 +175,8 @@ impl SerenadeEventHandler {
         }
 
         thread::sleep(Duration::from_millis(1000));
-        
-        return SerenadeEventHandler::create_client(connection)
+
+        return SerenadeEventHandler::create_client(connection);
     }
 
     pub fn heartbeat(&mut self, initial: bool) {
@@ -186,37 +184,45 @@ impl SerenadeEventHandler {
             message: "active".to_string(),
             data: HeartbeatData {
                 id: self.id.to_string(),
-                app: if initial { Some(String::from("nvim")) } else { None },
-                match_term: if initial { Some(String::from("term")) } else { None },
+                app: if initial {
+                    Some(String::from("nvim"))
+                } else {
+                    None
+                },
+                match_term: if initial {
+                    Some(String::from("term"))
+                } else {
+                    None
+                },
             },
         };
         let heartbeat_serialized = serde_json::to_string(&heartbeat_data).unwrap();
-        self.client.write_message(Message::text(&heartbeat_serialized)).unwrap();
+        self.client
+            .write_message(Message::text(&heartbeat_serialized))
+            .unwrap();
         info!("Sent heartbeat {:?}", &heartbeat_serialized);
     }
 
     pub fn handle_events(&mut self) {
         let start = Instant::now();
-        
+
         self.heartbeat(true);
-        
+
         loop {
             // every minute
             if start.elapsed().as_secs() % 60 == 0 {
                 self.heartbeat(false);
             }
-        
-             match self.rx.try_recv() {
-                Ok(v) => {
-                    match v.as_ref() {
-                        "start" => self.is_paused = false,
-                        "stop" => self.is_paused = true,
-                        _ => error!("Not a recognized cmd: {}", v),
-                    }
+
+            match self.rx.try_recv() {
+                Ok(v) => match v.as_ref() {
+                    "start" => self.is_paused = false,
+                    "stop" => self.is_paused = true,
+                    _ => error!("Not a recognized cmd: {}", v),
                 },
                 _ => {
                     debug!("No rx messages");
-                },
+                }
             };
 
             let msg = match self.client.read_message() {
@@ -230,12 +236,13 @@ impl SerenadeEventHandler {
             };
 
             info!("received message from Serenade: {:?}", raw_msg);
-            
-            let payload: SerenadePayload = serde_json::from_str(&raw_msg).expect("Unable to parse JSON");
-            
+
+            let payload: SerenadePayload =
+                serde_json::from_str(&raw_msg).expect("Unable to parse JSON");
+
             let mut cb1 = None;
             let mut cb2 = None;
-            
+
             for command in &payload.data.response.execute.commandsList {
                 let cmd = SerenadeMessages::from(command.cmd_type.to_string());
                 if cmd == SerenadeMessages::GetEditorState {
@@ -244,18 +251,22 @@ impl SerenadeEventHandler {
                         data: SerenadeStateCallbackData {
                             callback: String::from(&payload.data.callback),
                             data: self.get_editor_state(command.limited.unwrap()),
-                        }
+                        },
                     });
                 } else if (!self.is_paused) {
                     match cmd {
-                        SerenadeMessages::Diff => self.diff(command.source.as_ref(), command.cursor.as_ref()),
+                        SerenadeMessages::Diff => {
+                            self.diff(command.source.as_ref(), command.cursor.as_ref())
+                        }
                         SerenadeMessages::Undo => self.undo(),
                         SerenadeMessages::Redo => self.redo(),
                         SerenadeMessages::Save => self.save(),
-                        SerenadeMessages::Select => self.select(command.cursor.unwrap(), command.cursorEnd.unwrap()),
+                        SerenadeMessages::Select => {
+                            self.select(command.cursor.unwrap(), command.cursorEnd.unwrap())
+                        }
                         SerenadeMessages::NewTab => self.create_buffer(),
                         SerenadeMessages::CloseTab => self.close_buffer(),
-                        SerenadeMessages::NextTab => self.next_buffer() ,
+                        SerenadeMessages::NextTab => self.next_buffer(),
                         SerenadeMessages::PrevTab => self.prev_buffer(),
                         SerenadeMessages::SwitchTab => self.switch_buffer(command.index.unwrap()),
                         _ => {
@@ -268,26 +279,29 @@ impl SerenadeEventHandler {
                     message: String::from("callback"),
                     data: SerenadeCallbackData {
                         callback: String::from(&payload.data.callback),
-                        data: SerenadeCallbackMsg { message: String::from("completed") }
+                        data: SerenadeCallbackMsg {
+                            message: String::from("completed"),
+                        },
                     },
                 });
 
                 info!("{}", command.cmd_type);
             }
-            
+
             let mut cb_serialized = None;
-            
+
             if cb1.is_some() {
                 cb_serialized = Some(serde_json::to_string(&cb1.unwrap()).unwrap());
-            }
-            else if cb2.is_some() {
+            } else if cb2.is_some() {
                 cb_serialized = Some(serde_json::to_string(&cb2.unwrap()).unwrap());
             }
 
             debug!("writing to websocket: {:?}", cb_serialized);
-            
-            self.client.write_message(Message::text(cb_serialized.unwrap())).unwrap();
-    
+
+            self.client
+                .write_message(Message::text(cb_serialized.unwrap()))
+                .unwrap();
+
             thread::sleep(Duration::from_millis(50));
         }
     }
@@ -295,7 +309,7 @@ impl SerenadeEventHandler {
     fn get_editor_state(&mut self, limited: bool) -> SerenadeEditorState {
         let mut nvim = self.nvim.lock().unwrap();
         let buffer = nvim.get_current_buf().unwrap();
-    
+
         let full_file_name = buffer.get_name(&mut nvim).unwrap();
         let file_name_pieces: Vec<&str> = full_file_name.split('/').collect();
         let file_name = file_name_pieces[file_name_pieces.len() - 1];
@@ -320,9 +334,12 @@ impl SerenadeEventHandler {
             let mark_start = buffer.get_mark(&mut nvim, "<").unwrap();
             let mark_end = buffer.get_mark(&mut nvim, ">").unwrap();
             result.data.source = lines.join("\n");
-            result.data.cursor = SerenadeEventHandler::get_cursor_position(&result.data.source, cursor);
-            result.data.selectionStart = SerenadeEventHandler::get_cursor_position(&result.data.source, mark_start);
-            result.data.selectionEnd = SerenadeEventHandler::get_cursor_position(&result.data.source, mark_end);
+            result.data.cursor =
+                SerenadeEventHandler::get_cursor_position(&result.data.source, cursor);
+            result.data.selectionStart =
+                SerenadeEventHandler::get_cursor_position(&result.data.source, mark_start);
+            result.data.selectionEnd =
+                SerenadeEventHandler::get_cursor_position(&result.data.source, mark_end);
         }
 
         return result;
@@ -404,7 +421,7 @@ impl SerenadeEventHandler {
         let mut line_num: u64 = 1;
         let mut column: u64 = 0;
         let mut pos: u64 = 0;
-        
+
         for chr in source.chars() {
             if (*cursor > pos) {
                 if (chr == '\n') {
@@ -425,10 +442,13 @@ impl SerenadeEventHandler {
         let mut nvim = self.nvim.lock().unwrap();
         let buffer = nvim.get_current_buf().unwrap();
         let window = nvim.get_current_win().unwrap();
-        let cursor_pos = SerenadeEventHandler::get_cursor_position_rev(&source.unwrap(), cursor.unwrap());
+        let cursor_pos =
+            SerenadeEventHandler::get_cursor_position_rev(&source.unwrap(), cursor.unwrap());
         let lines: Vec<String> = source.unwrap().lines().map(|s| s.to_string()).collect();
         buffer.set_lines(&mut nvim, 0, -1, false, lines).unwrap();
-        window.set_cursor(&mut nvim, (cursor_pos.0 as i64, cursor_pos.1 as i64)).unwrap();
+        window
+            .set_cursor(&mut nvim, (cursor_pos.0 as i64, cursor_pos.1 as i64))
+            .unwrap();
         debug!("setting cursor position to {:?}", cursor_pos);
     }
 }
