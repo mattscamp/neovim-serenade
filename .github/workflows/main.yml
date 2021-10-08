@@ -27,7 +27,7 @@ jobs:
           cd target/x86_64-unknown-linux-musl/release
           strip neovim-serenade
           chmod +x neovim-serenade
-          tar -c naru | gzip > neovim-serenade.tar.gz
+          tar -c neovim-serenade | gzip > neovim-serenade.tar.gz
       - name: Upload binary
         uses: actions/upload-release-asset@v1
         env:
