@@ -2,9 +2,24 @@ if !exists('s:serenadejobid')
 	let s:serenadejobid = 0
 endif
 
+if !exists("g:os")
+    if has("win64") || has("win32") || has("win16")
+        let g:os = "Windows"
+    else
+        let g:os = substitute(system('uname'), '\n', '', '')
+    endif
+endif
+
 " Path to the binary
 let s:scriptdir = resolve(expand('<sfile>:p:h') . '/..')
-let s:bin = s:scriptdir . '/target/release/neovim-serenade'
+
+if g:os == "Darwin"
+    let s:bin = s:scriptdir . '/target/release/neovim-serenade.dmg'
+elseif g:os == "Linux"
+    let s:bin = s:scriptdir . '/target/release/neovim-serenade'
+elseif g:os == "Windows"
+    let s:bin = s:scriptdir . '/target/release/neovim-serenade.exe'
+endif
 
 " RPC message constants
 let s:SerenadeStop = 'serenade_stop'
