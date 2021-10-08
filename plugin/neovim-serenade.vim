@@ -4,7 +4,7 @@ endif
 
 " Path to the binary
 let s:scriptdir = resolve(expand('<sfile>:p:h') . '/..')
-let s:bin = s:scriptdir . '/target/debug/neovim-serenade'
+let s:bin = s:scriptdir . '/target/release/neovim-serenade'
 
 " RPC message constants
 let s:SerenadeStop = 'serenade_stop'
