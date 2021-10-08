@@ -17,7 +17,7 @@ cargo_build() {
 
 download() {
     if [ "$2" = ".tar.gz" ]; then
-        command -v curl > /dev/null && curl -L $1 --output target/release/${name}
+        command -v curl > /dev/null && curl -L $1 --output target/release/${name} && tar -xzf target/release/${name}
     else
     	command -v curl > /dev/null && curl -L $1 --output target/release/${name}${2}
     fi	
