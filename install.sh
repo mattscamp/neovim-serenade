@@ -16,14 +16,13 @@ cargo_build() {
 }
 
 download() {
-    command -v curl > /dev/null && \
-        curl --fail --location "$1" --output target/release/neovim-serenade
+    command -v curl > /dev/null && curl -L $1 | tar -xz -C target/release/
 }
 
 
 fetch_prebuilt_binary() {
     echo "Downloading binary.."
-    url=https://github.com/mattscamp/$name/releases/download/$version/${1}
+    url=https://github.com/mattscamp/$name/releases/download/$version/$name-${1}
     echo $url
     mkdir -p target/release
 
@@ -37,7 +36,9 @@ fetch_prebuilt_binary() {
 
 arch=$(uname)
 case "${arch}" in
-    "Darwin") fetch_prebuilt_binary $name-$version-darwin ;;
+    "Darwin") fetch_prebuilt_binary x86_64-apple-darwin.tar.gz ;;
+    "Linux") fetch_prebuilt_binary x86_64-unknown-linux-gnu.tar.gz ;;
+    #"WindowsNT") fetch_prebuilt_binary x86_64-pc-windows-msvc.zip ;;
     *) echo "No pre-built binary available for ${arch}."; cargo_build ;;
 esac
 
