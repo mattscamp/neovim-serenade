@@ -1,45 +1,100 @@
-name: Release
-
+name: release-binaries
 on:
-  push:
-    tags:
-      - v[0-9]+.*
+  release:
+    types: [published]
 
 jobs:
-  create-release:
+  linux-x86_64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          # (optional)
-          changelog: CHANGELOG.md
-        env:
-          # (required)
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v1
 
-  upload-assets:
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: taiki-e/upload-rust-binary-action@v1
+      - uses: actions-rs/toolchain@v1
         with:
-          # (required)
-          bin: neovim-serenade
-          # (optional) On which platform to distribute the `.tar.gz` file.
-          # [default value: unix]
-          # [possible values: all, unix, windows, none]
-          tar: unix
-          # (optional) On which platform to distribute the `.zip` file.
-          # [default value: windows]
-          # [possible values: all, unix, windows, none]
-          zip: windows
+          profile: minimal
+          toolchain: stable
+          default: true
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target x86_64-unknown-linux-musl
+          use-cross: true
+
+      - name: Optimize and package binary
+        run: |
+          cd target/x86_64-unknown-linux-musl/release
+          strip neovim-serenade
+          chmod +x neovim-serenade
+          tar -c naru | gzip > neovim-serenade.tar.gz
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
         env:
-          # (required)
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          asset_name: neovim-serenade-${{ github.event.release.tag-name }}-linux-x86_64.tar.gz
+          asset_path: target/x86_64-unknown-linux-musl/release/neovim-serenade.tar.gz
+          upload_url: ${{ github.event.release.upload_url }}
+
+  macos-x86_64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          default: true
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+          use-cross: true
+
+      - name: Optimize and package binary
+        run: |
+          cd target/release
+          strip neovim-serenade
+          chmod +x neovim-serenade
+          mkdir dmg
+          mv naru dmg/
+          hdiutil create -fs HFS+ -srcfolder dmg -volname neovim-serenade neovim-serenade.dmg
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          asset_name: neovim-serenade-${{ github.event.release.tag-name }}-macos-x86_64.dmg
+          asset_path: target/release/neovim-serenade.dmg
+          upload_url: ${{ github.event.release.upload_url }}
+
+  windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          default: true
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+          use-cross: true
+
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          asset_name: neovim-serenade-${{ github.event.release.tag-name }}-windows-x86_64.exe
+          asset_path: target/release/neovim-serenade.exe
+          upload_url: ${{ github.event.release.upload_url }}
