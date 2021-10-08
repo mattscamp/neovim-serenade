@@ -196,11 +196,16 @@ impl SerenadeEventHandler {
                 },
             },
         };
-        let heartbeat_serialized = serde_json::to_string(&heartbeat_data).unwrap();
-        self.client
-            .write_message(Message::text(&heartbeat_serialized))
-            .unwrap();
-        info!("Sent heartbeat {:?}", &heartbeat_serialized);
+
+        match serde_json::to_string(&heartbeat_data) {
+            Ok(v) => {
+                self.client.write_message(Message::text(&v)).unwrap();
+                info!("Sent heartbeat {:?}", &v);
+            }
+            Err(e) => {
+                warn!("Could not send heartbeat {:?}", e);
+            }
+        }
     }
 
     pub fn handle_events(&mut self) {
@@ -250,7 +255,7 @@ impl SerenadeEventHandler {
                         message: String::from("callback"),
                         data: SerenadeStateCallbackData {
                             callback: String::from(&payload.data.callback),
-                            data: self.get_editor_state(command.limited.unwrap()),
+                            data: self.get_editor_state(command.limited.unwrap_or_else(|| true)),
                         },
                     });
                 } else if (!self.is_paused) {
@@ -261,14 +266,17 @@ impl SerenadeEventHandler {
                         SerenadeMessages::Undo => self.undo(),
                         SerenadeMessages::Redo => self.redo(),
                         SerenadeMessages::Save => self.save(),
-                        SerenadeMessages::Select => {
-                            self.select(command.cursor.unwrap(), command.cursorEnd.unwrap())
-                        }
+                        SerenadeMessages::Select => self.select(
+                            command.cursor.unwrap_or_else(|| 0),
+                            command.cursorEnd.unwrap_or_else(|| 0),
+                        ),
                         SerenadeMessages::NewTab => self.create_buffer(),
                         SerenadeMessages::CloseTab => self.close_buffer(),
                         SerenadeMessages::NextTab => self.next_buffer(),
                         SerenadeMessages::PrevTab => self.prev_buffer(),
-                        SerenadeMessages::SwitchTab => self.switch_buffer(command.index.unwrap()),
+                        SerenadeMessages::SwitchTab => {
+                            self.switch_buffer(command.index.unwrap_or_else(|| 0))
+                        }
                         _ => {
                             info!("Unsupported cmd.");
                         }
@@ -307,57 +315,73 @@ impl SerenadeEventHandler {
     }
 
     fn get_editor_state(&mut self, limited: bool) -> SerenadeEditorState {
-        let mut nvim = self.nvim.lock().unwrap();
-        let buffer = nvim.get_current_buf().unwrap();
-
-        let full_file_name = buffer.get_name(&mut nvim).unwrap();
-        let file_name_pieces: Vec<&str> = full_file_name.split('/').collect();
-        let file_name = file_name_pieces[file_name_pieces.len() - 1];
-
-        let data = SerenadeStateData {
-            source: String::from(""),
-            cursor: 0,
-            selectionStart: 0,
-            selectionEnd: 0,
-            filename: String::from(file_name),
-        };
-
         let mut result = SerenadeEditorState {
             message: String::from("editorState"),
-            data,
+            data: SerenadeStateData {
+                source: String::from(""),
+                cursor: 0,
+                selectionStart: 0,
+                selectionEnd: 0,
+                filename: String::from(""),
+            },
         };
 
-        if limited != true {
-            let window = nvim.get_current_win().unwrap();
-            let lines = buffer.get_lines(&mut nvim, 0, -1, false).unwrap();
-            let cursor = window.get_cursor(&mut nvim).unwrap();
-            let mark_start = buffer.get_mark(&mut nvim, "<").unwrap();
-            let mark_end = buffer.get_mark(&mut nvim, ">").unwrap();
-            result.data.source = lines.join("\n");
-            result.data.cursor =
-                SerenadeEventHandler::get_cursor_position(&result.data.source, cursor);
-            result.data.selectionStart =
-                SerenadeEventHandler::get_cursor_position(&result.data.source, mark_start);
-            result.data.selectionEnd =
-                SerenadeEventHandler::get_cursor_position(&result.data.source, mark_end);
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                let buffer = nvim.get_current_buf().unwrap();
+
+                let full_file_name = buffer.get_name(&mut nvim).unwrap();
+                let file_name_pieces: Vec<&str> = full_file_name.split('/').collect();
+                let file_name = file_name_pieces[file_name_pieces.len() - 1];
+
+                result.data.filename = String::from(file_name);
+
+                if limited != true {
+                    let window = nvim.get_current_win().unwrap();
+                    let lines = buffer.get_lines(&mut nvim, 0, -1, false).unwrap();
+                    let cursor = window.get_cursor(&mut nvim).unwrap();
+                    let mark_start = buffer.get_mark(&mut nvim, "<").unwrap();
+                    let mark_end = buffer.get_mark(&mut nvim, ">").unwrap();
+                    result.data.source = lines.join("\n");
+                    result.data.cursor =
+                        SerenadeEventHandler::get_cursor_position(&result.data.source, cursor);
+                    result.data.selectionStart =
+                        SerenadeEventHandler::get_cursor_position(&result.data.source, mark_start);
+                    result.data.selectionEnd =
+                        SerenadeEventHandler::get_cursor_position(&result.data.source, mark_end);
+                }
+            }
+            _ => error!("Unable to lock nvim for \"get editor state\""),
         }
 
         return result;
     }
 
     fn undo(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":undo").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":undo").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"undo\""),
+        }
     }
 
     fn redo(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":redo").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":redo").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"redo\""),
+        }
     }
 
     fn save(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":w").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":w").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"save\""),
+        }
     }
 
     fn select(&mut self, start: u64, end: u64) {
@@ -375,28 +399,48 @@ impl SerenadeEventHandler {
     }
 
     fn switch_buffer(&mut self, index: u64) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(&format!(":b {}", index)).unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(&format!(":b {}", index)).unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"switch tab\""),
+        }
     }
 
     fn close_buffer(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":bd").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":bd").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"close tab\""),
+        }
     }
 
     fn create_buffer(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":enew").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":enew").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"create tab\""),
+        }
     }
 
     fn next_buffer(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":bnext").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":bnext").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"next tab\""),
+        }
     }
 
     fn prev_buffer(&mut self) {
-        let mut nvim = self.nvim.lock().unwrap();
-        nvim.command(":bprevious").unwrap();
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                nvim.command(":bprevious").unwrap();
+            }
+            _ => error!("Unable to lock nvim for \"previous tab\""),
+        }
     }
 
     fn get_cursor_position(source: &str, cursor: (i64, i64)) -> u64 {
@@ -439,16 +483,22 @@ impl SerenadeEventHandler {
     }
 
     fn diff(&mut self, source: Option<&String>, cursor: Option<&u64>) {
-        let mut nvim = self.nvim.lock().unwrap();
-        let buffer = nvim.get_current_buf().unwrap();
-        let window = nvim.get_current_win().unwrap();
-        let cursor_pos =
-            SerenadeEventHandler::get_cursor_position_rev(&source.unwrap(), cursor.unwrap());
-        let lines: Vec<String> = source.unwrap().lines().map(|s| s.to_string()).collect();
-        buffer.set_lines(&mut nvim, 0, -1, false, lines).unwrap();
-        window
-            .set_cursor(&mut nvim, (cursor_pos.0 as i64, cursor_pos.1 as i64))
-            .unwrap();
-        debug!("setting cursor position to {:?}", cursor_pos);
+        match self.nvim.lock() {
+            Ok(mut nvim) => {
+                let buffer = nvim.get_current_buf().unwrap();
+                let window = nvim.get_current_win().unwrap();
+                let cursor_pos = SerenadeEventHandler::get_cursor_position_rev(
+                    &source.unwrap(),
+                    cursor.unwrap(),
+                );
+                let lines: Vec<String> = source.unwrap().lines().map(|s| s.to_string()).collect();
+                buffer.set_lines(&mut nvim, 0, -1, false, lines).unwrap();
+                window
+                    .set_cursor(&mut nvim, (cursor_pos.0 as i64, cursor_pos.1 as i64))
+                    .unwrap();
+                debug!("setting cursor position to {:?}", cursor_pos);
+            }
+            _ => error!("Unable to lock nvim for \"diff\""),
+        }
     }
 }
