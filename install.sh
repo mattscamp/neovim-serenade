@@ -36,9 +36,9 @@ fetch_prebuilt_binary() {
 
 arch=$(uname)
 case "${arch}" in
-    "Darwin") fetch_prebuilt_binary x86_64-apple-darwin.tar.gz ;;
-    "Linux") fetch_prebuilt_binary x86_64-unknown-linux-gnu.tar.gz ;;
-    #"WindowsNT") fetch_prebuilt_binary x86_64-pc-windows-msvc.zip ;;
+    "Darwin") fetch_prebuilt_binary "-macos-x86_64.dmg" ;;
+    "Linux") fetch_prebuilt_binary "-linux-x86_64.tar.gz" ;;
+    "WindowsNT") fetch_prebuilt_binary "-windows-x86_64.exe" ;;
     *) echo "No pre-built binary available for ${arch}."; cargo_build ;;
 esac
 
