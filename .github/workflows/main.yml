@@ -35,6 +35,7 @@ jobs:
         with:
           asset_name: neovim-serenade-${{ github.event.release.tag-name }}-linux-x86_64.tar.gz
           asset_path: target/x86_64-unknown-linux-musl/release/neovim-serenade.tar.gz
+          asset_content_type: application/octet-stream
           upload_url: ${{ github.event.release.upload_url }}
 
   macos-x86_64:
@@ -61,7 +62,7 @@ jobs:
           strip neovim-serenade
           chmod +x neovim-serenade
           mkdir dmg
-          mv naru dmg/
+          mv neovim-serenade dmg/
           hdiutil create -fs HFS+ -srcfolder dmg -volname neovim-serenade neovim-serenade.dmg
       - name: Upload binary
         uses: actions/upload-release-asset@v1
@@ -70,6 +71,7 @@ jobs:
         with:
           asset_name: neovim-serenade-${{ github.event.release.tag-name }}-macos-x86_64.dmg
           asset_path: target/release/neovim-serenade.dmg
+          asset_content_type: application/octet-stream
           upload_url: ${{ github.event.release.upload_url }}
 
   windows-x86_64:
@@ -97,4 +99,5 @@ jobs:
         with:
           asset_name: neovim-serenade-${{ github.event.release.tag-name }}-windows-x86_64.exe
           asset_path: target/release/neovim-serenade.exe
+          asset_content_type: application/octet-stream
           upload_url: ${{ github.event.release.upload_url }}
