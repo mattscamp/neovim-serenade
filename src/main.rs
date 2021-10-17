@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate unwrap;
+
 pub mod neovim;
 mod serenade;
 
@@ -15,7 +18,7 @@ use std::env;
 use std::sync::mpsc::channel;
 use std::{thread, time};
 
-use neovim_lib::{Neovim, NeovimApi, Session};
+use neovim_lib::{Neovim, Session};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -26,12 +29,15 @@ fn init(tx: Sender<String>, rx: Receiver<String>) {
     let neovim = Neovim::new(session);
 
     let nvim_instance = Arc::new(Mutex::new(neovim));
-
+ 
     let mut nvim = neovim::NVimEventHandler::new(Arc::clone(&nvim_instance), tx);
+
+    let nvim_thread = thread::spawn(move || nvim.handle_events());
+
     let mut serenade = serenade::SerenadeEventHandler::new(Arc::clone(&nvim_instance), rx);
 
     let serenade_thread = thread::spawn(move || serenade.handle_events());
-    let nvim_thread = thread::spawn(move || nvim.handle_events());
+    //let nvim_thread = thread::spawn(move || nvim.handle_events());
 
     serenade_thread
         .join()
@@ -65,12 +71,12 @@ fn main() {
             Root::builder()
                 .appender("logfile")
                 .appender("stderr")
-                .build(LevelFilter::Warn),
+                .build(LevelFilter::Debug),
         )
         .unwrap();
 
     let _handle = log4rs::init_config(config);
-
+    
     let (tx, rx) = channel();
 
     init(tx, rx);
